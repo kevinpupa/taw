@@ -1,5 +1,7 @@
-# Build stage
-FROM node:18-alpine AS builder
+# Angular Frontend - Docker Configuration
+# Development ready with live reload support
+
+FROM node:18-alpine
 
 WORKDIR /app
 
@@ -7,27 +9,13 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci
+RUN npm install
 
 # Copy source code
 COPY . .
 
-# Build Angular app
-RUN npm run build
-
-# Production stage
-FROM node:18-alpine
-
-WORKDIR /app
-
-# Install simple HTTP server for SPA
-RUN npm install -g http-server
-
-# Copy built app from builder
-COPY --from=builder /app/dist/flight-booking ./dist
-
-# Expose port
+# Expose port for Angular dev server
 EXPOSE 4200
 
-# Start server - serve SPA with history mode fallback
-CMD ["http-server", "dist", "-p", "4200", "--brotli", "--gzip", "-s"]
+# Start Angular development server
+CMD ["npm", "start"]

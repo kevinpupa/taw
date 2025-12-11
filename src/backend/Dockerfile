@@ -1,5 +1,5 @@
 # Flight Booking Backend - Docker Configuration
-# Production build for Express.js + MongoDB API server
+# Development and production ready for Express.js + MongoDB API server
 
 FROM node:18-alpine
 
@@ -9,7 +9,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci
+RUN npm install
 
 # Copy source code
 COPY . .
@@ -21,7 +21,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
     CMD node -e "require('http').get('http://localhost:3000/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
 
-# Start server with NODE_ENV set to production
-ENV NODE_ENV=production
-
-CMD ["node", "server.js"]
+# Start server - use nodemon for development, node for production
+CMD ["npm", "run", "dev"]

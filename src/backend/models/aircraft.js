@@ -56,11 +56,10 @@ const aircraftSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 // Calculate total capacity before saving
-aircraftSchema.pre('save', function(next) {
+aircraftSchema.pre('save', function() {
     this.totalCapacity = this.seatConfiguration.reduce((total, config) => {
         return total + (config.rows * config.seatsPerRow);
     }, 0);
-    next();
 });
 
 // Method to get seat map
