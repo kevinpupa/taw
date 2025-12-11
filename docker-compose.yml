@@ -9,8 +9,7 @@ services:
     environment:
       MONGO_INITDB_DATABASE: flight-booking
     volumes:
-      - ./src/database:/data/db
-      - ./src/database/config:/data/configdb
+      - mongodb_data:/data/db
     healthcheck:
       test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
       interval: 10s
@@ -74,4 +73,7 @@ services:
 
 networks:
   flight-booking-network:
-    driver: bridge
+
+volumes:
+  mongodb_data:
+    driver: local
