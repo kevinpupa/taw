@@ -47,13 +47,18 @@ const purchaseTicket = async (req, res, next) => {
         
         // Broadcast seat updates for each successfully locked seat
         const seatHandler = req.app.locals.seatHandler;
-        for (const ticket of result.createdTickets) {
-            if (seatHandler) {
-                seatHandler.broadcastSeatUpdate(
-                    ticket.flight._id,
-                    ticket.flight.bookedSeats || [],
-                    ticket.flight.aircraft?.totalCapacity || 0
-                );
+        if (seatHandler && result.createdTickets?.length) {
+            for (const ticket of result.createdTickets) {
+                try {
+                    // Refresh flight to get latest bookedSeats and capacity
+                    const flightDoc = await ticket.flight?.populate({ path: 'aircraft', select: 'totalCapacity' })
+                        || await ticketService.getFlightById?.(ticket.flight);
+                    const bookedSeats = flightDoc?.bookedSeats || [];
+                    const totalCap = flightDoc?.aircraft?.totalCapacity || 0;
+                    seatHandler.broadcastSeatUpdate(ticket.flight._id || ticket.flight, bookedSeats, totalCap);
+                } catch (err) {
+                    console.warn('Seat broadcast refresh failed', err?.message || err);
+                }
             }
         }
         

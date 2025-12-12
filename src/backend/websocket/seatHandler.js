@@ -21,20 +21,8 @@ const initializeSeatHandler = (io) => {
     const seatNamespace = io.of('/seats');
 
     seatNamespace.on('connection', (socket) => {
-        try {
-            const token = socket.handshake.auth?.token || socket.handshake.query?.token;
-            if (!token) {
-                socket.disconnect(true);
-                return;
-            }
-            jwt.verify(token, JWT_SECRET);
-        } catch (err) {
-            console.warn(`[WebSocket] Unauthorized socket ${socket.id}`);
-            socket.disconnect(true);
-            return;
-        }
-
-        console.log(`[WebSocket] User connected: ${socket.id}`);
+        // Seats namespace is read-only; allow unauthenticated connections for live seat maps
+        console.log(`[WebSocket] User connected to /seats: ${socket.id}`);
 
         /**
          * Join a flight's seat room
