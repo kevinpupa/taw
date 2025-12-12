@@ -33,14 +33,10 @@ export class AuthService {
   public mustChangePassword$ = this.mustChangePasswordSubject.asObservable();
 
   constructor(private http: HttpClient) {
-    // Load token from localStorage if exists
-    const savedToken = localStorage.getItem('authToken');
+    // Load user from localStorage if exists (token is in httpOnly cookie)
     const savedUser = localStorage.getItem('currentUser');
     const savedMustChange = localStorage.getItem('mustChangePassword');
     
-    if (savedToken) {
-      this.tokenSubject.next(savedToken);
-    }
     if (savedUser) {
       this.currentUserSubject.next(JSON.parse(savedUser));
     }
@@ -58,11 +54,11 @@ export class AuthService {
     email: string;
     password: string;
     phone?: string;
-  }): Observable<AuthResponse> {
-    return this.http.post<AuthResponse>(`${this.apiUrl}/register`, data)
+  }): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/register`, data)
       .pipe(
         tap(response => {
-          this.setAuthData(response.user, response.token, false);
+          this.setAuthData(response.user, undefined, false);
         })
       );
   }
@@ -71,11 +67,11 @@ export class AuthService {
    * Login user (passenger or airline)
    * POST /api/auth/login
    */
-  login(email: string, password: string): Observable<AuthResponse> {
-    return this.http.post<AuthResponse>(`${this.apiUrl}/login`, { email, password })
+  login(email: string, password: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/login`, { email, password })
       .pipe(
         tap(response => {
-          this.setAuthData(response.user, response.token, response.mustChangePassword);
+          this.setAuthData(response.user, undefined, response.mustChangePassword);
         })
       );
   }
@@ -83,13 +79,17 @@ export class AuthService {
   /**
    * Logout - clear tokens and user data
    */
-  logout(): void {
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('currentUser');
-    localStorage.removeItem('mustChangePassword');
-    this.tokenSubject.next(null);
-    this.currentUserSubject.next(null);
-    this.mustChangePasswordSubject.next(false);
+  logout(): Observable<any> {
+    return this.http.post(`${this.apiUrl}/logout`, {}).pipe(
+      tap(() => {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('currentUser');
+        localStorage.removeItem('mustChangePassword');
+        this.tokenSubject.next(null);
+        this.currentUserSubject.next(null);
+        this.mustChangePasswordSubject.next(false);
+      })
+    );
   }
 
   /**
@@ -126,7 +126,7 @@ export class AuthService {
    * Check if user is authenticated
    */
   isAuthenticated(): boolean {
-    return !!this.tokenSubject.value;
+    return !!this.currentUserSubject.value;
   }
 
   /**
@@ -146,13 +146,12 @@ export class AuthService {
   }
 
   /**
-   * Set authentication data (token and user)
+   * Set authentication data (user from response)
    */
-  private setAuthData(user: User, token: string, mustChangePassword: boolean = false): void {
-    localStorage.setItem('authToken', token);
+  private setAuthData(user: User, token: string | undefined, mustChangePassword: boolean = false): void {
+    // Token is now stored in httpOnly cookie by backend; we only store user data
     localStorage.setItem('currentUser', JSON.stringify(user));
     localStorage.setItem('mustChangePassword', mustChangePassword ? 'true' : 'false');
-    this.tokenSubject.next(token);
     this.currentUserSubject.next({ ...user, mustChangePassword });
     this.mustChangePasswordSubject.next(!!mustChangePassword);
   }

@@ -234,6 +234,7 @@ export class BookingComponent implements OnInit, OnDestroy {
   loading = false;
   error = '';
   wsConnected = false;
+  flightDeparted = false;
 
   private destroy$ = new Subject<void>();
 
@@ -250,10 +251,18 @@ export class BookingComponent implements OnInit, OnDestroy {
     if (stored) {
       this.selectedTrip = JSON.parse(stored);
       const flightId = this.selectedTrip.flights[0]._id || this.selectedTrip.flights[0].flightId;
+      this.checkDepartureStatus();
       this.loadSeatMap(flightId);
       this.loadFlightDetails(flightId);
       this.setupRealtimeSeats();
-    }
+      },
+      error: (err: any) => {
+        // Show backend-provided error message if available
+        const msg = err?.error?.message || err?.error?.error?.message;
+        const firstDetail = Array.isArray(err?.error?.errors) ? err.error.errors[0]?.message : undefined;
+        this.error = firstDetail || msg || 'Booking failed. Please try a different seat or flight.';
+        this.loading = false;
+      }
 
     const storedClass = sessionStorage.getItem('selectedClass');
     if (storedClass) {
@@ -339,6 +348,16 @@ export class BookingComponent implements OnInit, OnDestroy {
     });
   }
 
+  private checkDepartureStatus(): void {
+    const flight = this.selectedTrip?.flights?.[0];
+    const departure = flight?.departure?.time || flight?.departureTime;
+    if (!departure) {
+      this.flightDeparted = false;
+      return;
+    }
+    this.flightDeparted = new Date(departure).getTime() < Date.now();
+  }
+
   generateSeats(): void {
     const rows = ['A', 'B', 'C', 'D', 'E', 'F'];
     const cols = Array.from({ length: 6 }, (_, i) => i + 1);
@@ -366,6 +385,10 @@ export class BookingComponent implements OnInit, OnDestroy {
   }
 
   bookTicket(): void {
+    if (this.flightDeparted) {
+      this.error = 'This flight has already departed. Please search again for a new flight.';
+      return;
+    }
     if (!this.bookingForm.fullName || !this.bookingForm.email || !this.bookingForm.seat) {
       this.error = 'Please fill in all required fields';
       return;
@@ -382,15 +405,17 @@ export class BookingComponent implements OnInit, OnDestroy {
     const flightId = this.selectedTrip.flights[0]._id || this.selectedTrip.flights[0].flightId;
 
     const bookingData = {
-      flightId,
-      ticketClass: this.bookingForm.ticketClass,
-      seatNumber: this.bookingForm.seat,
-      passengerDetails: {
-        fullName: this.bookingForm.fullName,
-        email: this.bookingForm.email,
-        phone: this.bookingForm.phone
-      },
-      extras: this.bookingForm.extras
+      ticketRequests: [{
+        flightId,
+        classType: this.bookingForm.ticketClass,
+        seatNumber: this.bookingForm.seat,
+        passengerDetails: {
+          fullName: this.bookingForm.fullName,
+          email: this.bookingForm.email,
+          phone: this.bookingForm.phone
+        },
+        extras: this.bookingForm.extras
+      }]
     };
 
     this.ticketService.purchaseTicket(bookingData).subscribe({

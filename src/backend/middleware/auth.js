@@ -12,25 +12,26 @@ const getJwtSecret = () => {
 
 const JWT_SECRET = getJwtSecret();
 
-// Verify JWT token
+// Verify JWT token from httpOnly cookie
 const authenticate = async (req, res, next) => {
     try {
-        const authHeader = req.headers.authorization;
+        const token = req.cookies?.authToken;
         
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        if (!token) {
             return res.status(401).json({ error: { message: 'Access denied. No token provided.' } });
         }
         
-        const token = authHeader.split(' ')[1];
         const decoded = jwt.verify(token, JWT_SECRET);
         
         const user = await User.findById(decoded.userId).populate('airline');
         
         if (!user) {
+            res.clearCookie('authToken');
             return res.status(401).json({ error: { message: 'User not found.' } });
         }
         
         if (!user.isActive) {
+            res.clearCookie('authToken');
             return res.status(401).json({ error: { message: 'User account is deactivated.' } });
         }
         
@@ -38,25 +39,26 @@ const authenticate = async (req, res, next) => {
         next();
     } catch (error) {
         if (error.name === 'JsonWebTokenError') {
+            res.clearCookie('authToken');
             return res.status(401).json({ error: { message: 'Invalid token.' } });
         }
         if (error.name === 'TokenExpiredError') {
+            res.clearCookie('authToken');
             return res.status(401).json({ error: { message: 'Token expired.' } });
         }
         next(error);
     }
 };
 
-// Optional authentication - sets user if token is valid, but doesn't require it
+// Optional authentication from httpOnly cookie
 const optionalAuth = async (req, res, next) => {
     try {
-        const authHeader = req.headers.authorization;
+        const token = req.cookies?.authToken;
         
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        if (!token) {
             return next();
         }
         
-        const token = authHeader.split(' ')[1];
         const decoded = jwt.verify(token, JWT_SECRET);
         
         const user = await User.findById(decoded.userId).populate('airline');
@@ -80,10 +82,10 @@ const isAdmin = (req, res, next) => {
     next();
 };
 
-// Check if user is airline
-const isAirline = (req, res, next) => {
-    if (!req.user || req.user.role !== 'airline') {
-        return res.status(403).json({ error: { message: 'Airline access required.' } });
+// Check if user is airline_admin
+const isAirlineAdmin = (req, res, next) => {
+    if (!req.user || req.user.role !== 'airline_admin') {
+        return res.status(403).json({ error: { message: 'Airline admin access required.' } });
     }
     next();
 };
@@ -96,11 +98,10 @@ const isPassenger = (req, res, next) => {
     next();
 };
 
-// Check if user is admin or airline
 module.exports = {
     authenticate,
     optionalAuth,
     isAdmin,
-    isAirline,
+    isAirlineAdmin,
     isPassenger
 };

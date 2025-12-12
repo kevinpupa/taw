@@ -87,161 +87,228 @@ const getTicketById = async (identifier, userId) => {
 };
 
 /**
- * Purchase a ticket (book a seat on a flight)
+ * Purchase multiple tickets in one request (batch booking)
  * 
- * IMPORTANT: Uses MongoDB transactions for data consistency
+ * Flow per spec:
+ * 1. For each ticket request: validate flight, seat, class, pricing, extras
+ * 2. Pre-generate ticketId and attempt atomic seat lock via Flight.updateOne
+ * 3. Save ticket only if lock succeeds
+ * 4. Emit socket seatUpdated per successful lock
+ * 5. Return 201 (all success), 207 (partial), or 400 (all fail)
  * 
- * Libraries:
- * - mongoose.startSession(): Creates a database session for transactions
- * - session.startTransaction(): Begin atomic operation
- * - session.commitTransaction(): Save all changes
- * - session.abortTransaction(): Rollback all changes if error occurs
- * 
- * Non-default functions:
- * - .session(session): Execute query within transaction context
- * - .flatMap(): Flatten array and map (convert 2D array to 1D)
- * 
- * Business logic:
- * 1. Verify flight exists and is bookable
- * 2. Validate seat is available and matches ticket class
- * 3. Calculate ticket price including extras
- * 4. Create ticket record
- * 5. Add seat to flight's bookedSeats array
- * 6. Commit transaction (atomic - all or nothing)
+ * Partial success response includes:
+ * - tickets: array of successfully created tickets
+ * - errors: array of failed requests with reasons
+ * - bookingReference: shared batch reference for all in this purchase
  */
-const purchaseTicket = async (userId, data) => {
-    // Atomic flow without transactions
-    try {
-        const { flightId, ticketClass, seatNumber, passengerDetails, extras = {} } = data;
-        
-        // Get flight data
-        const flight = await Flight.findById(flightId)
-            .populate('aircraft')
-            .populate('route');
-        
-        // Validate flight exists
-        if (!flight || !flight.isActive) {
-            throw new Error('Flight not found');
-        }
-        
-        // Validate flight is still bookable
-        if (flight.status === 'cancelled') {
-            throw new Error('This flight has been cancelled');
-        }
-        
-        // Validate flight hasn't already departed
-        if (new Date(flight.departureTime) < new Date()) {
-            throw new Error('Cannot book a flight that has already departed');
-        }
-        
-        // Check if seat is available
-        if (!flight.isSeatAvailable(seatNumber.toUpperCase())) {
-            throw new Error('This seat is already booked');
-        }
-        
-        // Get all available seats from aircraft configuration
-        const seatMap = flight.aircraft.getSeatMap();
-        const allSeats = seatMap.flatMap(row => row.seats);  // Flatten 2D array to 1D
-        const seat = allSeats.find(s => s.seatNumber === seatNumber.toUpperCase());
-        
-        // Validate seat exists on this aircraft
-        if (!seat) {
-            throw new Error('Invalid seat number for this aircraft');
-        }
-        
-        // Validate seat class matches requested ticket class
-        // (user can't book a first class ticket for an economy seat)
-        if (seat.class !== ticketClass) {
-            throw new Error(`Seat ${seatNumber} is in ${seat.class} class, not ${ticketClass}`);
-        }
-        
-        // Get pricing for selected class
-        const classPrice = flight.pricing.find(p => p.class === ticketClass);
-        if (!classPrice) {
-            throw new Error('Invalid ticket class for this flight');
-        }
-        
-        // Calculate final price
-        let basePrice = classPrice.basePrice;
-        let extrasPrice = 0;
-        
-        // Add extra legroom cost if available and selected
-        if (extras.extraLegroom && seat.hasExtraLegroom) {
-            extrasPrice += classPrice.extraLegroomPrice || 0;
-        }
-        
-        // Add extra baggage cost (multiply by number of baggage items)
-        if (extras.extraBaggage && extras.extraBaggageCount > 0) {
-            extrasPrice += flight.extraBaggagePrice * extras.extraBaggageCount;
-        }
-        
-        const totalPrice = basePrice + extrasPrice;
-        
-        // Pre-create (unsaved) ticket document
-        const ticket = new Ticket({
-            passenger: userId,
-            flight: flight._id,
-            passengerDetails: {
-                fullName: passengerDetails.fullName,
-                email: passengerDetails.email.toLowerCase(),
-                phone: passengerDetails.phone,
-                dateOfBirth: passengerDetails.dateOfBirth,
-                passportNumber: passengerDetails.passportNumber
-            },
-            ticketClass,
-            seatNumber: seatNumber.toUpperCase(),
-            extras: {
-                extraLegroom: extras.extraLegroom || false,
-                extraBaggage: extras.extraBaggage || false,
-                extraBaggageCount: extras.extraBaggageCount || 0,
-                specialMeal: extras.specialMeal || 'standard'
-            },
-            pricing: {
-                basePrice,
-                extrasPrice,
-                totalPrice
-            }
-        });
-        
-        // Attempt atomic seat lock first (no transactions)
-        const seatToBook = seatNumber.toUpperCase();
-        const updatedFlight = await Flight.findOneAndUpdate(
-            { _id: flightId, bookedSeats: { $nin: [seatToBook] } },
-            { $addToSet: { bookedSeats: seatToBook } },
-            { new: true }
-        );
-
-        if (!updatedFlight) {
-            throw new Error('This seat is already booked');
-        }
-
-        // Save ticket only after successful seat lock
-        await ticket.save();
-
-        await updatedFlight.populate('aircraft');
-        
-        // Populate related data for response
-        await ticket.populate({
-            path: 'flight',
-            populate: [
-                { path: 'route' },
-                { path: 'airline', select: 'name code' },
-                { path: 'aircraft', select: 'model' }
-            ]
-        });
-        
-        return {
-            ticket,
-            bookingReference: ticket.bookingReference,
-            flight: updatedFlight
-        };
-    } catch (error) {
-        throw error;
+const purchaseTickets = async (userId, ticketRequests) => {
+    if (!Array.isArray(ticketRequests) || ticketRequests.length === 0) {
+        throw new Error('At least one ticket request is required');
     }
+    
+    // Generate shared booking reference for all tickets in this purchase
+    const bookingReference = generateBookingReference();
+    const createdTickets = [];
+    const errors = [];
+    
+    // Process each ticket request
+    for (let i = 0; i < ticketRequests.length; i++) {
+        try {
+            const req = ticketRequests[i];
+            const { flightId, classType, seatNumber, passengerDetails, extras = {} } = req;
+            
+            // Validate required fields
+            if (!flightId || !classType || !seatNumber || !passengerDetails) {
+                throw new Error('Missing required fields: flightId, classType, seatNumber, passengerDetails');
+            }
+            
+            // Fetch flight
+            const flight = await Flight.findById(flightId)
+                .populate('aircraft')
+                .populate('route');
+            
+            if (!flight || !flight.isActive) {
+                throw new Error('Flight not found or inactive');
+            }
+            
+            if (flight.status === 'cancelled') {
+                throw new Error('Flight is cancelled');
+            }
+            
+            if (new Date(flight.departureTime) < new Date()) {
+                throw new Error('Flight has already departed');
+            }
+            
+            const seatUpper = seatNumber.toUpperCase();
+            
+            // Validate seat exists and class matches
+            const seatMap = flight.aircraft.getSeatMap();
+            const allSeats = seatMap.flatMap(row => row.seats);
+            const seat = allSeats.find(s => s.seatNumber === seatUpper);
+            
+            if (!seat) {
+                throw new Error(`Invalid seat number: ${seatNumber}`);
+            }
+            
+            if (seat.class !== classType) {
+                throw new Error(`Seat ${seatNumber} is ${seat.class}, not ${classType}`);
+            }
+            
+            // Validate class pricing
+            const classPrice = flight.pricing.find(p => p.class === classType);
+            if (!classPrice) {
+                throw new Error(`No pricing found for class ${classType}`);
+            }
+            
+            // Calculate price
+            let basePrice = classPrice.basePrice;
+            let extrasPrice = 0;
+            const appliedExtras = [];
+            
+            // Validate and sum extras
+            if (extras && typeof extras === 'object') {
+                // Extra legroom
+                if (extras.extraLegroom && seat.hasExtraLegroom) {
+                    const extraLegroomPrice = classPrice.extraLegroomPrice || 0;
+                    extrasPrice += extraLegroomPrice;
+                    appliedExtras.push({ name: 'extraLegroom', price: extraLegroomPrice });
+                }
+                
+                // Extra baggage
+                if (extras.extraBaggage && extras.extraBaggageCount > 0) {
+                    const baggagePrice = flight.extraBaggagePrice * extras.extraBaggageCount;
+                    extrasPrice += baggagePrice;
+                    appliedExtras.push({ name: 'extraBaggage', count: extras.extraBaggageCount, price: baggagePrice });
+                }
+                
+                // Special meal
+                if (extras.specialMeal && ['standard', 'vegetarian', 'vegan', 'halal', 'kosher', 'gluten-free'].includes(extras.specialMeal)) {
+                    appliedExtras.push({ name: 'specialMeal', value: extras.specialMeal });
+                }
+            }
+            
+            const totalPrice = basePrice + extrasPrice;
+            
+            // Pre-generate ticket ObjectId
+            const ticketId = new mongoose.Types.ObjectId();
+            
+            // Attempt atomic seat lock
+            const updatedFlight = await Flight.findOneAndUpdate(
+                { 
+                    _id: flightId, 
+                    'bookedSeats': { $nin: [seatUpper] }
+                },
+                { $addToSet: { bookedSeats: seatUpper } },
+                { new: true }
+            );
+            
+            if (!updatedFlight) {
+                const currentFlight = await Flight.findById(flightId);
+                if (currentFlight && currentFlight.bookedSeats.includes(seatUpper)) {
+                    throw new Error(`Seat ${seatNumber} was just booked by another user`);
+                }
+                throw new Error(`Failed to lock seat ${seatNumber}`);
+            }
+            
+            // Create ticket document
+            const ticket = new Ticket({
+                _id: ticketId,
+                passenger: userId,
+                flight: flightId,
+                passengerDetails: {
+                    fullName: passengerDetails.fullName,
+                    email: passengerDetails.email?.toLowerCase(),
+                    phone: passengerDetails.phone,
+                    dateOfBirth: passengerDetails.dateOfBirth,
+                    passportNumber: passengerDetails.passportNumber
+                },
+                ticketClass: classType,
+                seatNumber: seatUpper,
+                extras: {
+                    extraLegroom: extras.extraLegroom || false,
+                    extraBaggage: extras.extraBaggage || false,
+                    extraBaggageCount: extras.extraBaggageCount || 0,
+                    specialMeal: extras.specialMeal || 'standard'
+                },
+                pricing: {
+                    basePrice,
+                    extrasPrice,
+                    totalPrice
+                },
+                bookingReference,
+                status: 'confirmed'
+            });
+            
+            try {
+                await ticket.save();
+            } catch (saveErr) {
+                // Roll back seat lock if ticket save fails
+                await Flight.findOneAndUpdate(
+                    { _id: flightId, bookedSeats: seatUpper },
+                    { $pull: { bookedSeats: seatUpper } }
+                );
+                throw new Error(`Ticket save failed: ${saveErr.message}`);
+            }
+            
+            // Populate for response
+            await ticket.populate({
+                path: 'flight',
+                populate: [
+                    { path: 'route' },
+                    { path: 'airline', select: 'name code' },
+                    { path: 'aircraft', select: 'model registrationNumber' }
+                ]
+            });
+            
+            createdTickets.push(ticket);
+        } catch (error) {
+            errors.push({
+                index: i,
+                message: error.message
+            });
+        }
+    }
+    
+    // Return appropriate response based on success/failure ratio
+    return {
+        createdTickets,
+        errors,
+        bookingReference: createdTickets.length > 0 ? bookingReference : null,
+        httpStatus: errors.length === 0 ? 201 : (createdTickets.length > 0 ? 207 : 400)
+    };
 };
 
 /**
- * Cancel a ticket
+ * Generate booking reference (e.g., "BK123ABC")
+ */
+const generateBookingReference = () => {
+    const prefix = 'BK';
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return prefix + code;
+};
+
+/**
+ * Backward compatibility: single ticket purchase wrapper
+ */
+const purchaseTicket = async (userId, ticketData) => {
+    const result = await purchaseTickets(userId, [ticketData]);
+    
+    if (result.httpStatus !== 201) {
+        throw new Error(result.errors[0]?.message || 'Ticket purchase failed');
+    }
+    
+    return {
+        ticket: result.createdTickets[0],
+        bookingReference: result.bookingReference
+    };
+};
+
+/**
+ * Cancel a ticket (user-initiated cancellation)
  * 
  * Business logic:
  * 1. Verify ticket belongs to user
@@ -249,7 +316,6 @@ const purchaseTicket = async (userId, data) => {
  * 3. Check if cancellation is allowed (>24 hours before departure)
  * 4. Mark ticket as cancelled
  * 5. Remove seat from flight's bookedSeats array
- * 6. Commit transaction
  */
 const cancelTicket = async (ticketId, userId) => {
     try {
@@ -315,21 +381,19 @@ const checkSeatAvailability = async (flightId) => {
     
     // Get seat map with real-time availability status
     const seatMap = flight.aircraft.getSeatMap().map(row => ({
-        ...row,  // Keep row class and other properties
+        ...row,
         seats: row.seats.map(seat => ({
-            ...seat,  // Keep seat number and other properties
-            isAvailable: flight.isSeatAvailable(seat.seatNumber)  // Check if booked
+            ...seat,
+            isAvailable: flight.isSeatAvailable(seat.seatNumber)
         }))
     }));
     
     // Calculate availability summary by seat class
     const availabilityByClass = {};
     for (const row of seatMap) {
-        // Initialize counter for this class if not exists
         if (!availabilityByClass[row.class]) {
             availabilityByClass[row.class] = { total: 0, available: 0 };
         }
-        // Count total and available seats in this class
         for (const seat of row.seats) {
             availabilityByClass[row.class].total++;
             if (seat.isAvailable) {
@@ -341,7 +405,7 @@ const checkSeatAvailability = async (flightId) => {
     return {
         flightId: flight._id,
         seatMap,
-        availabilityByClass,  // { economy: { total: 100, available: 45 }, ... }
+        availabilityByClass,
         totalSeats: flight.aircraft.totalCapacity,
         bookedSeats: flight.bookedSeats.length,
         availableSeats: flight.aircraft.totalCapacity - flight.bookedSeats.length
@@ -352,6 +416,7 @@ module.exports = {
     getUserTickets,
     getTicketById,
     purchaseTicket,
+    purchaseTickets,
     cancelTicket,
     checkSeatAvailability
 };

@@ -1,16 +1,16 @@
 const express = require('express');
 const { body, param, query } = require('express-validator');
 const flightController = require('../controllers/flights');
-const { authenticate, isAirline, optionalAuth } = require('../middleware/auth');
+const { authenticate, isAirlineAdmin, optionalAuth } = require('../middleware/auth');
 const { validate } = require('../middleware/validation');
 
 const router = express.Router();
 
-// Get all flights for the authenticated airline user
-router.get('/', authenticate, isAirline, flightController.getFlights);
+// Get all flights for the authenticated airline_admin user
+router.get('/', authenticate, isAirlineAdmin, flightController.getFlights);
 
-// Get flight statistics (airline only)
-router.get('/stats/overview', authenticate, isAirline, flightController.getFlightStats);
+// Get flight statistics (airline_admin only)
+router.get('/stats/overview', authenticate, isAirlineAdmin, flightController.getFlightStats);
 
 // Get flight by ID (public - for viewing flight details)
 router.get('/:id', optionalAuth, [
@@ -22,8 +22,8 @@ router.get('/:id/seat-map', [
     param('id').isMongoId().withMessage('Invalid flight ID')
 ], validate, flightController.getSeatMap);
 
-// Create flight (airline only)
-router.post('/', authenticate, isAirline, [
+// Create flight (airline_admin only)
+router.post('/', authenticate, isAirlineAdmin, [
     body('flightNumber').trim().notEmpty().withMessage('Flight number is required'),
     body('routeId').isMongoId().withMessage('Valid route ID is required'),
     body('aircraftId').isMongoId().withMessage('Valid aircraft ID is required'),
@@ -34,16 +34,16 @@ router.post('/', authenticate, isAirline, [
     body('extraBaggagePrice').optional().isFloat({ min: 0 }).withMessage('Extra baggage price must be non-negative')
 ], validate, flightController.createFlight);
 
-// Update flight (airline only)
-router.put('/:id', authenticate, isAirline, [
+// Update flight (airline_admin only)
+router.put('/:id', authenticate, isAirlineAdmin, [
     param('id').isMongoId().withMessage('Invalid flight ID'),
     body('departureTime').optional().isISO8601().withMessage('Valid departure time is required'),
     body('pricing').optional().isArray({ min: 1 }).withMessage('Pricing must be an array'),
     body('status').optional().isIn(['scheduled', 'boarding', 'departed', 'arrived', 'cancelled', 'delayed']).withMessage('Invalid status')
 ], validate, flightController.updateFlight);
 
-// Cancel flight (airline only)
-router.post('/:id/cancel', authenticate, isAirline, [
+// Cancel flight (airline_admin only)
+router.post('/:id/cancel', authenticate, isAirlineAdmin, [
     param('id').isMongoId().withMessage('Invalid flight ID')
 ], validate, flightController.cancelFlight);
 

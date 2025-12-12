@@ -73,8 +73,15 @@ export class AppComponent implements OnInit {
 
   logout() {
     this.menuOpen = false;
-    this.authService.logout();
-    this.router.navigate(['/search']);
+    this.authService.logout().subscribe(
+      () => {
+        this.router.navigate(['/search']);
+      },
+      () => {
+        // Even if logout fails, clear local state
+        this.router.navigate(['/search']);
+      }
+    );
   }
 }
 

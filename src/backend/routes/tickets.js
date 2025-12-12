@@ -6,20 +6,25 @@ const { validate } = require('../middleware/validation');
 
 const router = express.Router();
 
-// Get user's tickets
+// Get user's bookings (my-bookings route for clarity in frontend)
+router.get('/my-bookings', authenticate, ticketController.getUserTickets);
+
+// Get user's tickets (pagination support)
 router.get('/', authenticate, ticketController.getUserTickets);
 
-// Purchase ticket (create booking)
+// Purchase ticket(s) - supports single ticket or batch ticketRequests array
 router.post('/', authenticate, [
-    body('flightId').isMongoId().withMessage('Valid flight ID is required'),
-    body('ticketClass').isIn(['economy', 'business', 'first']).withMessage('Invalid ticket class'),
-    body('seatNumber').trim().notEmpty().withMessage('Seat number is required'),
-    body('passengerDetails.fullName').trim().notEmpty().withMessage('Passenger full name is required'),
-    body('passengerDetails.email').isEmail().withMessage('Valid passenger email is required'),
-    body('extras.extraBaggage').optional().isBoolean(),
-    body('extras.extraBaggageCount').optional().isInt({ min: 0, max: 5 }),
-    body('extras.extraLegroom').optional().isBoolean(),
-    body('extras.specialMeal').optional().isIn(['standard', 'vegetarian', 'vegan', 'halal', 'kosher', 'gluten-free'])
+    body('ticketRequests').optional().isArray({ min: 1 }).withMessage('ticketRequests must be an array'),
+    body('ticketRequests.*.flightId').optional().isMongoId().withMessage('Valid flight ID is required'),
+    body('ticketRequests.*.classType').optional().isIn(['economy', 'business', 'first']).withMessage('Invalid ticket class'),
+    body('ticketRequests.*.seatNumber').optional().trim().notEmpty().withMessage('Seat number is required'),
+    body('ticketRequests.*.passengerDetails.fullName').optional().trim().notEmpty().withMessage('Passenger full name is required'),
+    body('ticketRequests.*.passengerDetails.email').optional().isEmail().withMessage('Valid passenger email is required'),
+    body('flightId').optional().isMongoId().withMessage('Valid flight ID is required'),
+    body('classType').optional().isIn(['economy', 'business', 'first']).withMessage('Invalid ticket class'),
+    body('seatNumber').optional().trim().notEmpty().withMessage('Seat number is required'),
+    body('passengerDetails.fullName').optional().trim().notEmpty().withMessage('Passenger full name is required'),
+    body('passengerDetails.email').optional().isEmail().withMessage('Valid passenger email is required')
 ], validate, ticketController.purchaseTicket);
 
 // Cancel ticket

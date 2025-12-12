@@ -35,35 +35,54 @@ const getTicketById = async (req, res, next) => {
     }
 };
 
-// Purchase ticket
+// Purchase ticket(s)
 const purchaseTicket = async (req, res, next) => {
     try {
-        const result = await ticketService.purchaseTicket(req.user._id, req.body);
+        // Handle both single ticket and array of tickets
+        const ticketData = Array.isArray(req.body.ticketRequests) 
+            ? req.body.ticketRequests 
+            : [req.body];
         
-        // Broadcast seat update to all connected clients
+        const result = await ticketService.purchaseTickets(req.user._id, ticketData);
+        
+        // Broadcast seat updates for each successfully locked seat
         const seatHandler = req.app.locals.seatHandler;
-        if (seatHandler && result.flight) {
-            seatHandler.broadcastSeatUpdate(
-                result.flight._id,
-                result.flight.bookedSeats || [],
-                result.flight.aircraft?.totalCapacity || 0
-            );
+        for (const ticket of result.createdTickets) {
+            if (seatHandler) {
+                seatHandler.broadcastSeatUpdate(
+                    ticket.flight._id,
+                    ticket.flight.bookedSeats || [],
+                    ticket.flight.aircraft?.totalCapacity || 0
+                );
+            }
         }
         
-        res.status(201).json({
-            message: 'Ticket purchased successfully',
-            ticket: result.ticket,
-            bookingReference: result.bookingReference
-        });
-    } catch (error) {
-        if (error.message === 'Flight not found') {
-            return res.status(404).json({ error: { message: error.message } });
+        // Return appropriate status code
+        const statusCode = result.httpStatus;
+        
+        if (statusCode === 201) {
+            res.status(201).json({
+                message: 'All tickets purchased successfully',
+                tickets: result.createdTickets,
+                bookingReference: result.bookingReference
+            });
+        } else if (statusCode === 207) {
+            res.status(207).json({
+                message: 'Partial success: some tickets were purchased',
+                tickets: result.createdTickets,
+                errors: result.errors,
+                bookingReference: result.bookingReference
+            });
+        } else {
+            // Log failure reasons for debugging
+            console.error('Ticket purchase failed:', JSON.stringify(result.errors));
+            res.status(400).json({
+                message: 'All ticket purchases failed',
+                errors: result.errors
+            });
         }
-        if (error.message.includes('This flight has been cancelled') ||
-            error.message.includes('Cannot book') ||
-            error.message.includes('already booked') ||
-            error.message.includes('Invalid seat') ||
-            error.message.includes('not bookable')) {
+    } catch (error) {
+        if (error.message.includes('Flight not found') || error.message.includes('Invalid seat')) {
             return res.status(400).json({ error: { message: error.message } });
         }
         next(error);

@@ -11,12 +11,28 @@ const getJwtSecret = () => {
 };
 
 const JWT_SECRET = getJwtSecret();
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '30d';
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
-// Generate JWT token
-const generateToken = (userId) => {
-    return jwt.sign({ userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+// Generate JWT token with role and airlineId
+const generateToken = (user) => {
+    const payload = { 
+        userId: user._id, 
+        role: user.role,
+        airlineId: user.airline ? user.airline._id || user.airline : null
+    };
+    return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 };
+
+// Get cookie options for httpOnly token storage
+const getCookieOptions = () => ({
+    httpOnly: true,
+    secure: IS_PRODUCTION,
+    sameSite: 'Lax',
+    maxAge: 30 * 24 * 60 * 60 * 1000
+});
+
+const TOKEN_COOKIE_NAME = 'authToken';
 
 // Register a new passenger user
 const registerPassenger = async (userData) => {
@@ -38,7 +54,7 @@ const registerPassenger = async (userData) => {
     
     await user.save();
     
-    const token = generateToken(user._id);
+    const token = generateToken(user);
     
     return { user, token };
 };
@@ -61,7 +77,7 @@ const loginUser = async (email, password) => {
         throw new Error('Invalid email or password');
     }
     
-    const token = generateToken(user._id);
+    const token = generateToken(user);
     
     return { user, token, mustChangePassword: user.mustChangePassword };
 };
@@ -117,6 +133,8 @@ const createAirlineUser = async (userData, adminUser) => {
 
 module.exports = {
     generateToken,
+    getCookieOptions,
+    TOKEN_COOKIE_NAME,
     registerPassenger,
     loginUser,
     changePassword,

@@ -21,7 +21,7 @@ const userSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        enum: ['passenger', 'airline', 'admin'],
+        enum: ['passenger', 'airline_admin', 'admin'],
         default: 'passenger'
     },
     // reference to airline if the user is an airline

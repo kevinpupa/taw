@@ -15,6 +15,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const http = require('http');
 const { Server } = require('socket.io');
 require('dotenv').config();
@@ -25,6 +26,8 @@ const searchRoutes = require('./routes/search');
 const flightRoutes = require('./routes/flights');
 const ticketRoutes = require('./routes/tickets');
 const airlineRoutes = require('./routes/airlines');
+const airlineAdminRoutes = require('./routes/airline');
+const adminRoutes = require('./routes/admin');
 const aircraftRoutes = require('./routes/aircraft');
 const routeRoutes = require('./routes/routes');
 const userRoutes = require('./routes/users');
@@ -76,6 +79,12 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 /**
+ * Cookie Parser Middleware
+ * Parse httpOnly cookies from requests
+ */
+app.use(cookieParser());
+
+/**
  * Request Logging Middleware
  * Log all API requests in development mode
  */
@@ -97,6 +106,8 @@ app.use('/api/search', searchRoutes);
 app.use('/api/flights', flightRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/airlines', airlineRoutes);
+app.use('/api/airline', airlineAdminRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/api/aircraft', aircraftRoutes);
 app.use('/api/routes', routeRoutes);
 app.use('/api/users', userRoutes);

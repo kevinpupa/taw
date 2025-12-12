@@ -109,7 +109,7 @@ ticketSchema.index({ passenger: 1, createdAt: -1 });
 ticketSchema.index({ flight: 1 });
 
 // Generate booking reference before saving
-ticketSchema.pre('save', function(next) {
+ticketSchema.pre('save', function() {
     if (!this.bookingReference) {
         // Generate a 6-character alphanumeric booking reference
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -119,7 +119,6 @@ ticketSchema.pre('save', function(next) {
         }
         this.bookingReference = reference;
     }
-    next();
 });
 
 const Ticket = mongoose.model('Ticket', ticketSchema);

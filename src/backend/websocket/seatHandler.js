@@ -99,8 +99,22 @@ const initializeSeatHandler = (io) => {
         });
     };
 
+    /**
+     * Broadcast flight status update (cancellation, reactivation, etc.)
+     * Called from admin/airline operations
+     */
+    const broadcastFlightUpdate = (flightId, data) => {
+        const roomName = `flight-${flightId}`;
+        seatNamespace.to(roomName).emit('flight-update', {
+            flightId,
+            ...data,
+            timestamp: new Date()
+        });
+    };
+
     return {
-        broadcastSeatUpdate
+        broadcastSeatUpdate,
+        broadcastFlightUpdate
     };
 };
 

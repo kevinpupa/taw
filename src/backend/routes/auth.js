@@ -15,10 +15,10 @@ router.post('/register', [
 ], validate, async (req, res, next) => {
     try {
         const { user, token } = await authService.registerPassenger(req.body);
+        res.cookie(authService.TOKEN_COOKIE_NAME, token, authService.getCookieOptions());
         res.status(201).json({
             message: 'Registration successful',
-            user,
-            token
+            user
         });
     } catch (error) {
         if (error.message.includes('already exists')) {
@@ -37,10 +37,10 @@ router.post('/login', [
         const { email, password } = req.body;
         const { user, token, mustChangePassword } = await authService.loginUser(email, password);
         
+        res.cookie(authService.TOKEN_COOKIE_NAME, token, authService.getCookieOptions());
         res.json({
             message: 'Login successful',
             user,
-            token,
             mustChangePassword
         });
     } catch (error) {
@@ -54,6 +54,12 @@ router.post('/login', [
 // Get current user profile
 router.get('/me', authenticate, async (req, res) => {
     res.json({ user: req.user });
+});
+
+// Logout
+router.post('/logout', authenticate, (req, res) => {
+    res.clearCookie(authService.TOKEN_COOKIE_NAME);
+    res.json({ message: 'Logged out successfully' });
 });
 
 // Change password

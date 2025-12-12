@@ -64,22 +64,24 @@ export class TicketService {
    * POST /api/tickets
    */
   purchaseTicket(data: {
-    flightId: string;
-    ticketClass: string;
-    seatNumber: string;
-    passengerDetails: {
-      fullName: string;
-      email: string;
-      phone?: string;
-      dateOfBirth?: string;
-      passportNumber?: string;
-    };
-    extras?: {
-      extraBaggage?: boolean;
-      extraBaggageCount?: number;
-      extraLegroom?: boolean;
-      specialMeal?: string;
-    };
+    ticketRequests: Array<{
+      flightId: string;
+      classType: string;
+      seatNumber: string;
+      passengerDetails: {
+        fullName: string;
+        email: string;
+        phone?: string;
+        dateOfBirth?: string;
+        passportNumber?: string;
+      };
+      extras?: {
+        extraBaggage?: boolean;
+        extraBaggageCount?: number;
+        extraLegroom?: boolean;
+        specialMeal?: string;
+      };
+    }>;
   }): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}`, data);
   }
