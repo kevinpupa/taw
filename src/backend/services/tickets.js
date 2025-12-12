@@ -110,41 +110,32 @@ const getTicketById = async (identifier, userId) => {
  * 6. Commit transaction (atomic - all or nothing)
  */
 const purchaseTicket = async (userId, data) => {
-    // Start transaction session
-    // Transaction = multiple operations that succeed together or fail together
-    const session = await mongoose.startSession();
-    session.startTransaction();
-    
+    // Atomic flow without transactions
     try {
         const { flightId, ticketClass, seatNumber, passengerDetails, extras = {} } = data;
         
-        // Get flight data (lock it during transaction)
+        // Get flight data
         const flight = await Flight.findById(flightId)
             .populate('aircraft')
-            .populate('route')
-            .session(session);  // Use transaction session
+            .populate('route');
         
         // Validate flight exists
         if (!flight || !flight.isActive) {
-            await session.abortTransaction();  // Cancel all changes
             throw new Error('Flight not found');
         }
         
         // Validate flight is still bookable
         if (flight.status === 'cancelled') {
-            await session.abortTransaction();
             throw new Error('This flight has been cancelled');
         }
         
         // Validate flight hasn't already departed
         if (new Date(flight.departureTime) < new Date()) {
-            await session.abortTransaction();
             throw new Error('Cannot book a flight that has already departed');
         }
         
         // Check if seat is available
         if (!flight.isSeatAvailable(seatNumber.toUpperCase())) {
-            await session.abortTransaction();
             throw new Error('This seat is already booked');
         }
         
@@ -155,21 +146,18 @@ const purchaseTicket = async (userId, data) => {
         
         // Validate seat exists on this aircraft
         if (!seat) {
-            await session.abortTransaction();
             throw new Error('Invalid seat number for this aircraft');
         }
         
         // Validate seat class matches requested ticket class
         // (user can't book a first class ticket for an economy seat)
         if (seat.class !== ticketClass) {
-            await session.abortTransaction();
             throw new Error(`Seat ${seatNumber} is in ${seat.class} class, not ${ticketClass}`);
         }
         
         // Get pricing for selected class
         const classPrice = flight.pricing.find(p => p.class === ticketClass);
         if (!classPrice) {
-            await session.abortTransaction();
             throw new Error('Invalid ticket class for this flight');
         }
         
@@ -189,7 +177,7 @@ const purchaseTicket = async (userId, data) => {
         
         const totalPrice = basePrice + extrasPrice;
         
-        // Create new ticket document
+        // Pre-create (unsaved) ticket document
         const ticket = new Ticket({
             passenger: userId,
             flight: flight._id,
@@ -215,26 +203,22 @@ const purchaseTicket = async (userId, data) => {
             }
         });
         
-        // Save ticket within transaction
-        await ticket.save({ session });
-        
-        // Add seat atomically to avoid race conditions
+        // Attempt atomic seat lock first (no transactions)
         const seatToBook = seatNumber.toUpperCase();
-        let updatedFlight = await Flight.findOneAndUpdate(
+        const updatedFlight = await Flight.findOneAndUpdate(
             { _id: flightId, bookedSeats: { $nin: [seatToBook] } },
             { $addToSet: { bookedSeats: seatToBook } },
-            { session, new: true }
+            { new: true }
         );
 
         if (!updatedFlight) {
-            await session.abortTransaction();
             throw new Error('This seat is already booked');
         }
 
+        // Save ticket only after successful seat lock
+        await ticket.save();
+
         await updatedFlight.populate('aircraft');
-        
-        // Commit transaction - all changes are permanent
-        await session.commitTransaction();
         
         // Populate related data for response
         await ticket.populate({
@@ -252,12 +236,7 @@ const purchaseTicket = async (userId, data) => {
             flight: updatedFlight
         };
     } catch (error) {
-        // If any error occurs, rollback entire transaction
-        await session.abortTransaction();
         throw error;
-    } finally {
-        // Always end session (cleanup)
-        session.endSession();
     }
 };
 
@@ -273,23 +252,18 @@ const purchaseTicket = async (userId, data) => {
  * 6. Commit transaction
  */
 const cancelTicket = async (ticketId, userId) => {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-    
     try {
         const ticket = await Ticket.findOne({
             _id: ticketId,
             passenger: userId
-        }).populate('flight').session(session);
+        }).populate('flight');
         
         if (!ticket) {
-            await session.abortTransaction();
             throw new Error('Ticket not found');
         }
         
         // Only confirmed tickets can be cancelled
         if (ticket.status !== 'confirmed') {
-            await session.abortTransaction();
             throw new Error('This ticket cannot be cancelled');
         }
         
@@ -298,38 +272,29 @@ const cancelTicket = async (ticketId, userId) => {
         const hoursUntilDeparture = (new Date(flight.departureTime) - new Date()) / (1000 * 60 * 60);
         
         if (hoursUntilDeparture < 24) {
-            await session.abortTransaction();
             throw new Error('Cancellation not allowed less than 24 hours before departure');
         }
         
         // Mark ticket as cancelled
         ticket.status = 'cancelled';
-        await ticket.save({ session });
+        await ticket.save();
         
         // Free up the seat atomically
-        let updatedFlight = await Flight.findOneAndUpdate(
+        const updatedFlight = await Flight.findOneAndUpdate(
             { _id: flight._id, bookedSeats: ticket.seatNumber },
             { $pull: { bookedSeats: ticket.seatNumber } },
-            { session, new: true }
+            { new: true }
         );
 
         if (!updatedFlight) {
-            await session.abortTransaction();
             throw new Error('Seat release failed');
         }
 
         await updatedFlight.populate('aircraft');
         
-        // Commit transaction
-        await session.commitTransaction();
-        
         return { ticket, flight: updatedFlight };
     } catch (error) {
-        // Rollback on any error
-        await session.abortTransaction();
         throw error;
-    } finally {
-        session.endSession();
     }
 };
 

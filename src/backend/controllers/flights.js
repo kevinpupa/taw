@@ -111,5 +111,17 @@ module.exports = {
     createFlight,
     updateFlight,
     cancelFlight,
-    getFlightStats
+    getFlightStats,
+    // New: seat map for flight
+    getSeatMap: async (req, res, next) => {
+        try {
+            const result = await flightService.getSeatMap(req.params.id);
+            res.json(result);
+        } catch (error) {
+            if (error.message === 'Flight not found') {
+                return res.status(404).json({ error: { message: error.message } });
+            }
+            next(error);
+        }
+    }
 };

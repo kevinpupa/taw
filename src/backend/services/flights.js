@@ -86,6 +86,37 @@ const getFlightById = async (flightId) => {
 };
 
 /**
+ * Get seat map, pricing, and capacity for a flight (public)
+ */
+const getSeatMap = async (flightId) => {
+    const flight = await Flight.findById(flightId)
+        .populate('aircraft');
+
+    if (!flight || !flight.isActive) {
+        throw new Error('Flight not found');
+    }
+
+    const seatMap = flight.aircraft.getSeatMap().map(row => ({
+        ...row,
+        seats: row.seats.map(seat => ({
+            ...seat,
+            isAvailable: flight.isSeatAvailable(seat.seatNumber)
+        }))
+    }));
+
+    return {
+        flightId: flight._id,
+        seatMap,
+        pricing: {
+            classes: flight.pricing,
+            extraBaggagePrice: flight.extraBaggagePrice || 0
+        },
+        capacity: flight.aircraft.totalCapacity,
+        bookedSeats: flight.bookedSeats || []
+    };
+};
+
+/**
  * Create new flight
  * 
  * Business logic:
@@ -335,6 +366,7 @@ const getFlightStats = async (airlineId, filters = {}) => {
 module.exports = {
     getFlightsByAirline,
     getFlightById,
+    getSeatMap,
     createFlight,
     updateFlight,
     cancelFlight,

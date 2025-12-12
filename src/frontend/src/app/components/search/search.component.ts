@@ -15,7 +15,7 @@ import { AuthService } from '../../services/auth.service';
       
       <form (ngSubmit)="search()" class="bg-white p-8 rounded-lg shadow-md mb-8">
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
-          <div class="relative">
+          <div class="relative airport-input">
             <label class="form-label">From</label>
             <input 
               type="text" 
@@ -38,7 +38,7 @@ import { AuthService } from '../../services/auth.service';
             </div>
           </div>
           
-          <div class="relative">
+          <div class="relative airport-input">
             <label class="form-label">To</label>
             <input 
               type="text" 
@@ -257,9 +257,30 @@ export class SearchComponent implements OnInit {
     if (field === 'from') {
       this.searchForm.from = airport.code;
       this.showFromDropdown = false;
+      // Limit 'to' airports to those reachable from selected 'from'
+      this.flightService.getArrivalsForDeparture(airport.code).subscribe({
+        next: (arrivals) => {
+          this.filteredToAirports = arrivals;
+          this.showToDropdown = true;
+        },
+        error: () => {
+          // fallback to all airports
+          this.filteredToAirports = this.allAirports;
+        }
+      });
     } else {
       this.searchForm.to = airport.code;
       this.showToDropdown = false;
+      // Limit 'from' airports to those that can reach selected 'to'
+      this.flightService.getDeparturesForArrival(airport.code).subscribe({
+        next: (departures) => {
+          this.filteredFromAirports = departures;
+          this.showFromDropdown = true;
+        },
+        error: () => {
+          this.filteredFromAirports = this.allAirports;
+        }
+      });
     }
   }
 
@@ -311,6 +332,8 @@ export class SearchComponent implements OnInit {
     }
 
     sessionStorage.setItem('selectedTrip', JSON.stringify(trip));
+    // Preserve selected class from search so booking starts with it
+    sessionStorage.setItem('selectedClass', this.searchForm.class);
     this.router.navigate(['/booking']);
   }
 }

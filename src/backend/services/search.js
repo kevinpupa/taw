@@ -355,5 +355,35 @@ const getAvailableAirports = async (searchQuery = null) => {
 
 module.exports = {
     searchFlights,
-    getAvailableAirports
+    getAvailableAirports,
+    /**
+     * Get arrival airports given a departure airport code
+     */
+    getArrivalsForDeparture: async (fromCode) => {
+        const routes = await Route.find({
+            isActive: true,
+            'departureAirport.code': fromCode.toUpperCase()
+        }, { arrivalAirport: 1 });
+        const arrivalsMap = new Map();
+        routes.forEach(r => {
+            const a = r.arrivalAirport;
+            arrivalsMap.set(a.code, a);
+        });
+        return Array.from(arrivalsMap.values());
+    },
+    /**
+     * Get departure airports given an arrival airport code
+     */
+    getDeparturesForArrival: async (toCode) => {
+        const routes = await Route.find({
+            isActive: true,
+            'arrivalAirport.code': toCode.toUpperCase()
+        }, { departureAirport: 1 });
+        const departuresMap = new Map();
+        routes.forEach(r => {
+            const d = r.departureAirport;
+            departuresMap.set(d.code, d);
+        });
+        return Array.from(departuresMap.values());
+    }
 };

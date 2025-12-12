@@ -76,6 +76,22 @@ export class FlightService {
   }
 
   /**
+   * Get arrival airports for a given departure code
+   * GET /api/search/airports/arrivals?from=CODE
+   */
+  getArrivalsForDeparture(fromCode: string): Observable<any[]> {
+    return this.http.get<any[]>(`${this.apiUrl}/search/airports/arrivals?from=${fromCode}`);
+  }
+
+  /**
+   * Get departure airports for a given arrival code
+   * GET /api/search/airports/departures?to=CODE
+   */
+  getDeparturesForArrival(toCode: string): Observable<any[]> {
+    return this.http.get<any[]>(`${this.apiUrl}/search/airports/departures?to=${toCode}`);
+  }
+
+  /**
    * Get seat availability for a specific flight
    * GET /api/tickets/availability/:flightId
    */

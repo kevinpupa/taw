@@ -44,5 +44,25 @@ const getAvailableAirports = async (req, res, next) => {
 
 module.exports = {
     searchFlights,
-    getAvailableAirports
+    getAvailableAirports,
+    getArrivalsForDeparture: async (req, res, next) => {
+        try {
+            const { from } = req.query;
+            if (!from) return res.status(400).json({ error: { message: 'from is required' } });
+            const result = await searchService.getArrivalsForDeparture(from);
+            res.json(result);
+        } catch (error) {
+            next(error);
+        }
+    },
+    getDeparturesForArrival: async (req, res, next) => {
+        try {
+            const { to } = req.query;
+            if (!to) return res.status(400).json({ error: { message: 'to is required' } });
+            const result = await searchService.getDeparturesForArrival(to);
+            res.json(result);
+        } catch (error) {
+            next(error);
+        }
+    }
 };

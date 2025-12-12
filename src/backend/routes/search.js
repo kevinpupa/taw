@@ -20,4 +20,14 @@ router.get('/flights', [
 // Get available airports (public)
 router.get('/airports', searchController.getAvailableAirports);
 
+// Get arrivals for a departure airport (public)
+router.get('/airports/arrivals', [
+    query('from').trim().notEmpty().withMessage('from (departure code) is required')
+], validate, searchController.getArrivalsForDeparture);
+
+// Get departures for an arrival airport (public)
+router.get('/airports/departures', [
+    query('to').trim().notEmpty().withMessage('to (arrival code) is required')
+], validate, searchController.getDeparturesForArrival);
+
 module.exports = router;

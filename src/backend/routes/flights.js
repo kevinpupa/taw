@@ -17,6 +17,11 @@ router.get('/:id', optionalAuth, [
     param('id').isMongoId().withMessage('Invalid flight ID')
 ], validate, flightController.getFlightById);
 
+// Seat map for a flight (public)
+router.get('/:id/seat-map', [
+    param('id').isMongoId().withMessage('Invalid flight ID')
+], validate, flightController.getSeatMap);
+
 // Create flight (airline only)
 router.post('/', authenticate, isAirline, [
     body('flightNumber').trim().notEmpty().withMessage('Flight number is required'),

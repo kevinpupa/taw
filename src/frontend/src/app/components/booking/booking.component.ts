@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { TicketService } from '../../services/ticket.service';
+import { FlightService } from '../../services/flight.service';
 import { AuthService } from '../../services/auth.service';
 import { SeatWebSocketService } from '../../services/seat-websocket.service';
 import { Subject } from 'rxjs';
@@ -32,7 +33,7 @@ import { takeUntil } from 'rxjs/operators';
             </div>
           </div>
           <div class="mt-4 pt-4 border-t">
-            <p class="text-2xl font-bold text-sky-600">{{ selectedTrip.totalPrice | currency }}</p>
+            <p class="text-2xl font-bold text-sky-600">{{ getTotalPrice() | currency }}</p>
             <p *ngIf="availableSeatsCount" class="text-sm text-green-600 font-medium mt-2">
               {{ availableSeatsCount }} seats available
             </p>
@@ -78,6 +79,7 @@ import { takeUntil } from 'rxjs/operators';
               <select 
                 [(ngModel)]="bookingForm.ticketClass" 
                 name="class"
+                (ngModelChange)="onClassChange()"
                 class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
                 <option value="economy">Economy</option>
                 <option value="business">Business</option>
@@ -93,16 +95,27 @@ import { takeUntil } from 'rxjs/operators';
               Real-time seat availability enabled
             </div>
             <div class="seat-grid">
-              <div *ngFor="let seat of availableSeats" 
-                   [ngClass]="{
-                     'seat': true, 
-                     'seat-selected': bookingForm.seat === seat, 
-                     'seat-booked': bookedSeats.includes(seat),
-                     'seat-available': !bookedSeats.includes(seat) && bookingForm.seat !== seat
-                   }"
-                   (click)="!bookedSeats.includes(seat) && selectSeat(seat)"
-                   [style.cursor]="bookedSeats.includes(seat) ? 'not-allowed' : 'pointer'">
-                {{ seat }}
+              <div class="flex items-center gap-4 text-xs text-gray-500 mb-2">
+                <span class="inline-block px-2 py-1 rounded bg-gray-200">Booked</span>
+                <span class="inline-block px-2 py-1 rounded bg-sky-200">Available</span>
+                <span class="inline-block px-2 py-1 rounded bg-green-200">Selected</span>
+              </div>
+              <div *ngFor="let row of seatMap" class="flex items-center gap-3 mb-2">
+                <div class="w-28 text-sm font-medium text-gray-600">{{ row.class | titlecase }}</div>
+                <div class="flex flex-wrap gap-2">
+                  <div *ngFor="let s of row.seats"
+                       class="seat"
+                       [ngClass]="{
+                         'seat-selected': bookingForm.seat === s.seatNumber,
+                         'seat-booked': !s.isAvailable,
+                         'opacity-50 cursor-not-allowed': !s.isAvailable || row.class !== bookingForm.ticketClass,
+                         'seat-available': s.isAvailable && row.class === bookingForm.ticketClass && bookingForm.seat !== s.seatNumber
+                       }"
+                       [title]="!s.isAvailable ? 'Booked' : (row.class !== bookingForm.ticketClass ? 'Select ' + (bookingForm.ticketClass | titlecase) + ' seats' : (s.hasExtraLegroom ? 'Extra legroom' : ''))"
+                       (click)="onSeatClick(s, row.class)">
+                    {{ s.seatNumber }}
+                  </div>
+                </div>
               </div>
             </div>
             <p class="text-gray-600 mt-2">Selected: <span class="font-semibold">{{ bookingForm.seat || 'None' }}</span></p>
@@ -117,8 +130,9 @@ import { takeUntil } from 'rxjs/operators';
                   type="checkbox" 
                   [(ngModel)]="bookingForm.extras.extraLegroom" 
                   name="legroom"
+                  [disabled]="!selectedSeatHasExtraLegroom"
                   class="rounded">
-                <span class="ml-3 text-gray-700">Extra Legroom - $25</span>
+                <span class="ml-3 text-gray-700">Extra Legroom - {{ getExtraLegroomPrice() | currency }}</span>
               </label>
               
               <label class="flex items-center">
@@ -127,7 +141,7 @@ import { takeUntil } from 'rxjs/operators';
                   [(ngModel)]="bookingForm.extras.extraBaggage" 
                   name="baggage"
                   class="rounded">
-                <span class="ml-3 text-gray-700">Extra Baggage</span>
+                <span class="ml-3 text-gray-700">Extra Baggage - {{ extraBaggagePrice | currency }} each</span>
                 <input 
                   type="number" 
                   [(ngModel)]="bookingForm.extras.extraBaggageCount" 
@@ -135,7 +149,7 @@ import { takeUntil } from 'rxjs/operators';
                   min="0" 
                   max="5" 
                   *ngIf="bookingForm.extras.extraBaggage"
-                  class="ml-2 w-16 px-2 py-1 border border-gray-300 rounded"> pieces &#64; $15 each
+                  class="ml-2 w-16 px-2 py-1 border border-gray-300 rounded"> pieces
               </label>
               
               <div>
@@ -154,6 +168,30 @@ import { takeUntil } from 'rxjs/operators';
               </div>
             </div>
           </div>
+
+          <!-- Price Summary -->
+          <div class="mb-6 bg-sky-50 border border-sky-200 p-4 rounded-lg">
+            <h3 class="text-lg font-bold mb-3 text-sky-800">Price Summary</h3>
+            <div class="text-sm text-gray-700 space-y-1">
+              <div class="flex justify-between">
+                <span>Base fare ({{ bookingForm.ticketClass | titlecase }})</span>
+                <span>{{ getBasePrice() | currency }}</span>
+              </div>
+              <div class="flex justify-between" *ngIf="bookingForm.extras.extraLegroom">
+                <span>Extra legroom</span>
+                <span>{{ getExtraLegroomPrice() | currency }}</span>
+              </div>
+              <div class="flex justify-between" *ngIf="bookingForm.extras.extraBaggage && bookingForm.extras.extraBaggageCount > 0">
+                <span>Extra baggage ({{ bookingForm.extras.extraBaggageCount }} × {{ extraBaggagePrice | currency }})</span>
+                <span>{{ (bookingForm.extras.extraBaggageCount * extraBaggagePrice) | currency }}</span>
+              </div>
+              <div class="flex justify-between font-semibold pt-2 border-t mt-2">
+                <span>Total</span>
+                <span>{{ getTotalPrice() | currency }}</span>
+              </div>
+            </div>
+            <p class="text-xs text-gray-500 mt-2">Final total is confirmed at booking and may adjust based on seat features and airline pricing.</p>
+          </div>
           
           <div *ngIf="error" class="alert alert-error mb-6">{{ error }}</div>
           
@@ -170,6 +208,12 @@ import { takeUntil } from 'rxjs/operators';
 })
 export class BookingComponent implements OnInit, OnDestroy {
   selectedTrip: any = null;
+  seatMap: any[] = [];
+  selectedSeatClass: string | null = null;
+  selectedSeatHasExtraLegroom = false;
+  flightPricing: any[] = [];
+  extraBaggagePrice = 15;
+  extraLegroomPrices: { [key: string]: number } = {};
   bookingForm = {
     fullName: '',
     email: '',
@@ -195,6 +239,7 @@ export class BookingComponent implements OnInit, OnDestroy {
 
   constructor(
     private ticketService: TicketService,
+    private flightService: FlightService,
     public authService: AuthService,
     private router: Router,
     private seatWebSocketService: SeatWebSocketService
@@ -204,8 +249,15 @@ export class BookingComponent implements OnInit, OnDestroy {
     const stored = sessionStorage.getItem('selectedTrip');
     if (stored) {
       this.selectedTrip = JSON.parse(stored);
-      this.generateSeats();
+      const flightId = this.selectedTrip.flights[0]._id || this.selectedTrip.flights[0].flightId;
+      this.loadSeatMap(flightId);
+      this.loadFlightDetails(flightId);
       this.setupRealtimeSeats();
+    }
+
+    const storedClass = sessionStorage.getItem('selectedClass');
+    if (storedClass) {
+      this.bookingForm.ticketClass = storedClass;
     }
 
     const user = this.authService.getCurrentUser();
@@ -237,11 +289,54 @@ export class BookingComponent implements OnInit, OnDestroy {
         next: (update: any) => {
           this.bookedSeats = update.bookedSeats || [];
           this.availableSeatsCount = update.availableSeats || 0;
+          // Update seatMap availability flags if we have it
+          if (this.seatMap && this.seatMap.length) {
+            this.seatMap = this.seatMap.map((row: any) => ({
+              ...row,
+              seats: row.seats.map((s: any) => ({
+                ...s,
+                isAvailable: !this.bookedSeats.includes((s.seatNumber || s))
+              }))
+            }));
+          }
         },
         error: (err) => {
           console.error('Error receiving seat updates:', err);
         }
       });
+  }
+
+  private loadSeatMap(flightId: string) {
+    this.ticketService.checkSeatAvailability(flightId).subscribe({
+      next: (res) => {
+        this.seatMap = res.seatMap || [];
+        this.availableSeatsCount = res.availableSeats || 0;
+        // Initialize bookedSeats list from response for consistency
+        this.bookedSeats = Array.isArray(res.bookedSeats) ? res.bookedSeats : [];
+      },
+      error: (err) => {
+        console.error('Failed to load seat map', err);
+        // Fallback to simple grid if needed
+        this.generateSeats();
+      }
+    });
+  }
+
+  private loadFlightDetails(flightId: string) {
+    this.flightService.getFlightById(flightId).subscribe({
+      next: (flight: any) => {
+        this.flightPricing = flight.pricing || [];
+        this.extraBaggagePrice = typeof flight.extraBaggagePrice === 'number' ? flight.extraBaggagePrice : this.extraBaggagePrice;
+        // Build per-class extra legroom price map if present
+        this.extraLegroomPrices = {};
+        (this.flightPricing || []).forEach((p: any) => {
+          if (p && typeof p.extraLegroomPrice === 'number') {
+            this.extraLegroomPrices[p.class] = p.extraLegroomPrice;
+          }
+        });
+      },
+      error: (err) => console.error('Failed to load flight details', err)
+    });
   }
 
   generateSeats(): void {
@@ -251,11 +346,19 @@ export class BookingComponent implements OnInit, OnDestroy {
     this.availableSeatsCount = this.availableSeats.length;
   }
 
-  selectSeat(seat: string): void {
-    if (this.bookedSeats.includes(seat)) {
+  onSeatClick(seat: any, seatClass: string): void {
+    if (!seat || !seat.isAvailable) return;
+    if (seatClass !== this.bookingForm.ticketClass) {
+      this.error = `Please select a ${this.bookingForm.ticketClass} seat`;
       return;
     }
-    this.bookingForm.seat = this.bookingForm.seat === seat ? '' : seat;
+    this.error = '';
+    const next = this.bookingForm.seat === seat.seatNumber ? '' : seat.seatNumber;
+    this.bookingForm.seat = next;
+    this.selectedSeatClass = next ? seatClass : null;
+    this.selectedSeatHasExtraLegroom = !!(next && seat.hasExtraLegroom);
+    // Auto toggle legroom extra based on seat property
+    this.bookingForm.extras.extraLegroom = this.selectedSeatHasExtraLegroom;
   }
 
   formatDate(date: any): string {
@@ -301,5 +404,57 @@ export class BookingComponent implements OnInit, OnDestroy {
         this.loading = false;
       }
     });
+  }
+
+  // Pricing helpers (UI estimation)
+  getBasePrice(): number {
+    // Prefer flightPricing fetched from backend
+    const cls = this.bookingForm.ticketClass;
+    if (this.flightPricing && this.flightPricing.length) {
+      const p = this.flightPricing.find((x: any) => x.class === cls);
+      if (p && typeof p.basePrice === 'number') return p.basePrice;
+    }
+    if (!this.selectedTrip || !this.selectedTrip.flights) return 0;
+    // Try to compute from flights' pricing arrays
+    let sum = 0;
+    for (const f of this.selectedTrip.flights) {
+      const p = (f.pricing || []).find((x: any) => x.class === cls);
+      if (p && typeof p.basePrice === 'number') sum += p.basePrice;
+    }
+    // Fallback to pricePerPerson from search if class matches search selection
+    if (sum === 0 && typeof this.selectedTrip.pricePerPerson === 'number') {
+      sum = this.selectedTrip.pricePerPerson;
+    }
+    return sum;
+  }
+
+  getExtrasPrice(): number {
+    let extra = 0;
+    if (this.bookingForm.extras.extraLegroom) extra += this.getExtraLegroomPrice();
+    if (this.bookingForm.extras.extraBaggage && this.bookingForm.extras.extraBaggageCount > 0) {
+      extra += this.bookingForm.extras.extraBaggageCount * this.extraBaggagePrice;
+    }
+    return extra;
+  }
+
+  getTotalPrice(): number {
+    return this.getBasePrice() + this.getExtrasPrice();
+  }
+
+  getExtraLegroomPrice(): number {
+    const cls = this.bookingForm.ticketClass;
+    const v = this.extraLegroomPrices[cls];
+    return typeof v === 'number' ? v : 25; // fallback
+  }
+
+  onClassChange() {
+    // Clear seat if it doesn't match the selected class
+    if (this.selectedSeatClass && this.selectedSeatClass !== this.bookingForm.ticketClass) {
+      this.bookingForm.seat = '';
+      this.selectedSeatClass = null;
+      this.selectedSeatHasExtraLegroom = false;
+      this.bookingForm.extras.extraLegroom = false;
+    }
+    this.error = '';
   }
 }
