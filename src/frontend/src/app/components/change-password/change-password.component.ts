@@ -9,27 +9,50 @@ import { AuthService } from '../../services/auth.service';
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="card" style="max-width: 420px; margin: 50px auto;">
-      <h2>Change Password</h2>
+    <div class="max-w-md mx-auto mt-12">
+      <div class="bg-white rounded-lg shadow-md p-8">
+        <h2 class="text-3xl font-bold text-center mb-8 text-gray-800">Change Password</h2>
 
-      <div *ngIf="error" class="alert alert-error">{{ error }}</div>
-      <div *ngIf="success" class="alert alert-success">{{ success }}</div>
+        <div *ngIf="error" class="alert alert-error mb-6">{{ error }}</div>
+        <div *ngIf="success" class="alert alert-success mb-6">{{ success }}</div>
 
-      <form (ngSubmit)="submit()">
-        <div>
-          <label>Current Password</label>
-          <input type="password" name="current" [(ngModel)]="form.current" required />
-        </div>
-        <div>
-          <label>New Password</label>
-          <input type="password" name="next" [(ngModel)]="form.next" required minlength="6" />
-        </div>
-        <div>
-          <label>Confirm New Password</label>
-          <input type="password" name="confirm" [(ngModel)]="form.confirm" required minlength="6" />
-        </div>
-        <button [disabled]="loading">{{ loading ? 'Saving...' : 'Update Password' }}</button>
-      </form>
+        <form (ngSubmit)="submit()" class="space-y-6">
+          <div class="form-group">
+            <label class="form-label">Current Password</label>
+            <input 
+              type="password" 
+              name="current" 
+              [(ngModel)]="form.current" 
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
+              required />
+          </div>
+          <div class="form-group">
+            <label class="form-label">New Password</label>
+            <input 
+              type="password" 
+              name="next" 
+              [(ngModel)]="form.next" 
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
+              required 
+              minlength="6" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Confirm New Password</label>
+            <input 
+              type="password" 
+              name="confirm" 
+              [(ngModel)]="form.confirm" 
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
+              required 
+              minlength="6" />
+          </div>
+          <button 
+            [disabled]="loading"
+            class="w-full bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white font-medium py-2 rounded-lg transition">
+            {{ loading ? 'Saving...' : 'Update Password' }}
+          </button>
+        </form>
+      </div>
     </div>
   `
 })

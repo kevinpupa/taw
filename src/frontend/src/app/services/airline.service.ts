@@ -83,6 +83,14 @@ export class AirlineService {
   }
 
   /**
+   * Delete aircraft
+   * DELETE /api/aircraft/:id
+   */
+  deleteAircraft(id: string): Observable<any> {
+    return this.http.delete<any>(`${this.apiUrl}/aircraft/${id}`);
+  }
+
+  /**
    * Get airlines
    * GET /api/airlines
    */

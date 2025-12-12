@@ -9,27 +9,53 @@ import { AuthService } from '../../services/auth.service';
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
   template: `
-    <div class="card" style="max-width: 400px; margin: 50px auto;">
-      <h2>Login</h2>
-      
-      <div *ngIf="error" class="alert alert-error">{{ error }}</div>
-      <div *ngIf="success" class="alert alert-success">{{ success }}</div>
-      
-      <form (ngSubmit)="login()">
-        <div>
-          <label>Email:</label>
-          <input type="email" [(ngModel)]="form.email" name="email" required>
+    <div class="min-h-screen bg-gradient-to-br from-sky-50 to-sky-100 flex items-center justify-center px-4">
+      <div class="w-full max-w-md">
+        <div class="bg-white rounded-2xl shadow-2xl p-8">
+          <h2 class="text-4xl font-bold text-center mb-2 text-sky-900">Welcome Back</h2>
+          <p class="text-center text-gray-500 mb-8">Sign in to your Flight Booking account</p>
+          
+          <div *ngIf="error" class="alert alert-error mb-6 rounded-lg border border-red-200">{{ error }}</div>
+          <div *ngIf="success" class="alert alert-success mb-6 rounded-lg border border-green-200">{{ success }}</div>
+          
+          <form (ngSubmit)="login()" class="space-y-5">
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
+              <input 
+                type="email" 
+                [(ngModel)]="form.email" 
+                name="email"
+                placeholder="you@example.com"
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent transition"
+                required>
+            </div>
+            
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Password</label>
+              <input 
+                type="password" 
+                [(ngModel)]="form.password" 
+                name="password"
+                placeholder="Enter your password"
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent transition"
+                required>
+            </div>
+            
+            <button 
+              [disabled]="loading"
+              class="w-full bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition transform hover:scale-105">
+              {{ loading ? 'Signing in...' : 'Sign In' }}
+            </button>
+          </form>
+          
+          <div class="mt-8 pt-8 border-t border-gray-200">
+            <p class="text-center text-gray-600">
+              Don't have an account? 
+              <a routerLink="/register" class="text-sky-600 hover:text-sky-700 font-semibold hover:underline">Create one</a>
+            </p>
+          </div>
         </div>
-        
-        <div>
-          <label>Password:</label>
-          <input type="password" [(ngModel)]="form.password" name="password" required>
-        </div>
-        
-        <button [disabled]="loading">{{ loading ? 'Logging in...' : 'Login' }}</button>
-      </form>
-      
-      <p>Don't have an account? <a routerLink="/register">Register here</a></p>
+      </div>
     </div>
   `
 })

@@ -7,8 +7,8 @@ import { AirlineService } from '../../services/airline.service';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div style="max-width: 1000px; margin: 0 auto;">
-      <h2>User Management</h2>
+    <div class="max-w-6xl mx-auto">
+      <h2 class="text-4xl font-bold mb-8 text-gray-800">User Management</h2>
       
       <div *ngIf="loading" class="alert alert-info">Loading users...</div>
       <div *ngIf="error" class="alert alert-error">{{ error }}</div>

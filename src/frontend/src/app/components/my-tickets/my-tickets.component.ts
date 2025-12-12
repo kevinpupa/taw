@@ -7,22 +7,21 @@ import { TicketService } from '../../services/ticket.service';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div style="max-width: 1000px; margin: 0 auto;">
-      <h2>My Tickets</h2>
+    <div class="max-w-6xl mx-auto">
+      <h2 class="text-4xl font-bold mb-8 text-gray-800">My Tickets</h2>
       
       <div *ngIf="loading" class="alert alert-info">Loading tickets...</div>
       <div *ngIf="error" class="alert alert-error">{{ error }}</div>
       
-      <div *ngIf="!loading && tickets.length > 0">
-        <table>
+      <div *ngIf="!loading && tickets.length > 0" class="overflow-x-auto">
+        <table class="table">
           <thead>
             <tr>
-              <th>Booking Reference</th>
-              <th>Flight Number</th>
+              <th>Reference</th>
+              <th>Flight</th>
               <th>Airline</th>
               <th>Date</th>
-              <th>From</th>
-              <th>To</th>
+              <th>Route</th>
               <th>Seat</th>
               <th>Status</th>
               <th>Price</th>
@@ -31,20 +30,20 @@ import { TicketService } from '../../services/ticket.service';
           </thead>
           <tbody>
             <tr *ngFor="let ticket of tickets">
-              <td>{{ ticket.bookingReference }}</td>
+              <td class="font-mono text-sm">{{ ticket.bookingReference }}</td>
               <td>{{ ticket.flight?.flightNumber }}</td>
               <td>{{ ticket.flight?.airline?.name }}</td>
               <td>{{ formatDate(ticket.flight?.departureTime) }}</td>
-              <td>{{ ticket.flight?.route?.departureAirport?.code }}</td>
-              <td>{{ ticket.flight?.route?.arrivalAirport?.code }}</td>
+              <td>{{ ticket.flight?.route?.departureAirport?.code }} → {{ ticket.flight?.route?.arrivalAirport?.code }}</td>
               <td>{{ ticket.seatNumber }}</td>
-              <td>{{ ticket.status }}</td>
-              <td>\${{ ticket.pricing?.totalPrice | number:'1.2-2' }}</td>
+              <td><span class="px-2 py-1 bg-sky-100 text-sky-800 rounded text-sm">{{ ticket.status }}</span></td>
+              <td class="font-semibold">{{ ticket.pricing?.totalPrice | currency }}</td>
               <td>
-                <button *ngIf="ticket.status === 'confirmed'" 
-                        (click)="cancelTicket(ticket._id)"
-                        class="danger"
-                        [disabled]="cancelingId === ticket._id">
+                <button 
+                  *ngIf="ticket.status === 'confirmed'" 
+                  (click)="cancelTicket(ticket._id)"
+                  class="btn-danger text-sm py-1 px-3"
+                  [disabled]="cancelingId === ticket._id">
                   {{ cancelingId === ticket._id ? 'Canceling...' : 'Cancel' }}
                 </button>
               </td>

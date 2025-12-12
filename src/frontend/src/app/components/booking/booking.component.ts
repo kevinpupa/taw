@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { TicketService } from '../../services/ticket.service';
 import { AuthService } from '../../services/auth.service';
 import { SeatWebSocketService } from '../../services/seat-websocket.service';
@@ -11,156 +11,162 @@ import { takeUntil } from 'rxjs/operators';
 @Component({
   selector: 'app-booking',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   template: `
-    <div style="max-width: 1000px; margin: 0 auto;">
-      <h2>Book Flight</h2>
+    <div class="max-w-4xl mx-auto">
+      <h2 class="text-4xl font-bold mb-8 text-gray-800">Book Your Flight</h2>
       
       <div *ngIf="!selectedTrip" class="alert alert-warning">
-        <p>No flight selected. <a routerLink="/search">Go back to search</a></p>
+        <p>No flight selected. <a routerLink="/search" class="font-semibold hover:underline">Go back to search</a></p>
       </div>
       
-      <div *ngIf="selectedTrip">
-        <!-- Display selected flight details -->
+      <div *ngIf="selectedTrip" class="space-y-6">
+        <!-- Flight Details Card -->
         <div class="card">
-          <h3>Selected Flight</h3>
-          <div *ngFor="let flight of selectedTrip.flights">
-            <p><strong>{{ flight.flightNumber }}</strong> - {{ flight.airline.name }}</p>
-            <p>{{ formatDate(flight.departure.time) }} → {{ formatDate(flight.arrival.time) }}</p>
-            <p>{{ flight.departure.airport.code }} → {{ flight.arrival.airport.code }}</p>
+          <h3 class="text-2xl font-bold mb-4 text-gray-800">Selected Flight</h3>
+          <div class="space-y-3">
+            <div *ngFor="let flight of selectedTrip.flights" class="bg-sky-50 p-4 rounded-lg border border-sky-200">
+              <p class="font-semibold text-lg text-gray-800">{{ flight.flightNumber }} - {{ flight.airline.name }}</p>
+              <p class="text-gray-600">{{ formatDate(flight.departure.time) }} → {{ formatDate(flight.arrival.time) }}</p>
+              <p class="text-gray-600">{{ flight.departure.airport.code }} → {{ flight.arrival.airport.code }}</p>
+            </div>
           </div>
-          <p><strong>Total Price: \${{ selectedTrip.totalPrice }}</strong></p>
-          <p *ngIf="availableSeatsCount" style="color: green; font-size: 12px;">
-            Available seats: {{ availableSeatsCount }}
-          </p>
+          <div class="mt-4 pt-4 border-t">
+            <p class="text-2xl font-bold text-sky-600">{{ selectedTrip.totalPrice | currency }}</p>
+            <p *ngIf="availableSeatsCount" class="text-sm text-green-600 font-medium mt-2">
+              {{ availableSeatsCount }} seats available
+            </p>
+          </div>
         </div>
         
-        <!-- Booking form -->
+        <!-- Booking Form -->
         <form (ngSubmit)="bookTicket()" class="card">
-          <h3>Passenger Details</h3>
+          <h3 class="text-2xl font-bold mb-6 text-gray-800">Passenger Information</h3>
           
-          <div class="grid-2">
-            <div>
-              <label>Full Name:</label>
-              <input type="text" [(ngModel)]="bookingForm.fullName" name="fullName" required>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div class="form-group">
+              <label class="form-label">Full Name</label>
+              <input 
+                type="text" 
+                [(ngModel)]="bookingForm.fullName" 
+                name="fullName" 
+                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
+                required>
             </div>
             
-            <div>
-              <label>Email:</label>
-              <input type="email" [(ngModel)]="bookingForm.email" name="email" required>
+            <div class="form-group">
+              <label class="form-label">Email</label>
+              <input 
+                type="email" 
+                [(ngModel)]="bookingForm.email" 
+                name="email" 
+                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
+                required>
             </div>
             
-            <div>
-              <label>Phone (optional):</label>
-              <input type="text" [(ngModel)]="bookingForm.phone" name="phone">
+            <div class="form-group">
+              <label class="form-label">Phone (optional)</label>
+              <input 
+                type="text" 
+                [(ngModel)]="bookingForm.phone" 
+                name="phone"
+                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
             </div>
             
-            <div>
-              <label>Ticket Class:</label>
-              <select [(ngModel)]="bookingForm.ticketClass" name="class">
-                <option>economy</option>
-                <option>business</option>
-                <option>first</option>
+            <div class="form-group">
+              <label class="form-label">Ticket Class</label>
+              <select 
+                [(ngModel)]="bookingForm.ticketClass" 
+                name="class"
+                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
+                <option value="economy">Economy</option>
+                <option value="business">Business</option>
+                <option value="first">First Class</option>
               </select>
             </div>
           </div>
           
-          <!-- Seat Selection with Real-Time Availability -->
-          <h3>Select Your Seat</h3>
-          <div *ngIf="wsConnected" style="color: green; font-size: 12px; margin-bottom: 10px;">
-            ✓ Real-time seat availability enabled
-          </div>
-          <div class="seat-grid">
-            <div *ngFor="let seat of availableSeats" 
-                 [ngClass]="{
-                   'seat': true, 
-                   'seat-selected': bookingForm.seat === seat, 
-                   'seat-booked': bookedSeats.includes(seat),
-                   'seat-available': !bookedSeats.includes(seat) && bookingForm.seat !== seat
-                 }"
-                 (click)="!bookedSeats.includes(seat) && selectSeat(seat)"
-                 [style.cursor]="bookedSeats.includes(seat) ? 'not-allowed' : 'pointer'">
-              {{ seat }}
+          <!-- Seat Selection -->
+          <div class="mb-6">
+            <h3 class="text-lg font-bold mb-3 text-gray-800">Select Your Seat</h3>
+            <div *ngIf="wsConnected" class="text-sm text-green-600 font-medium mb-3">
+              Real-time seat availability enabled
             </div>
+            <div class="seat-grid">
+              <div *ngFor="let seat of availableSeats" 
+                   [ngClass]="{
+                     'seat': true, 
+                     'seat-selected': bookingForm.seat === seat, 
+                     'seat-booked': bookedSeats.includes(seat),
+                     'seat-available': !bookedSeats.includes(seat) && bookingForm.seat !== seat
+                   }"
+                   (click)="!bookedSeats.includes(seat) && selectSeat(seat)"
+                   [style.cursor]="bookedSeats.includes(seat) ? 'not-allowed' : 'pointer'">
+                {{ seat }}
+              </div>
+            </div>
+            <p class="text-gray-600 mt-2">Selected: <span class="font-semibold">{{ bookingForm.seat || 'None' }}</span></p>
           </div>
-          <p>Selected: {{ bookingForm.seat || 'None' }}</p>
           
           <!-- Extras -->
-          <h3>Extras</h3>
-          <div class="extras-section">
-            <div class="extra-item">
-              <input type="checkbox" [(ngModel)]="bookingForm.extras.extraLegroom" name="legroom" id="legroom">
-              <label for="legroom">Extra Legroom - \$25</label>
-            </div>
-            
-            <div class="extra-item">
-              <input type="checkbox" [(ngModel)]="bookingForm.extras.extraBaggage" name="baggage" id="baggage">
-              <label for="baggage">Extra Baggage</label>
-              <input type="number" [(ngModel)]="bookingForm.extras.extraBaggageCount" name="baggageCount" min="0" max="5" *ngIf="bookingForm.extras.extraBaggage"> pieces &#64; \$15 each
-            </div>
-            
-            <div>
-              <label>Special Meal:</label>
-              <select [(ngModel)]="bookingForm.extras.specialMeal" name="meal">
-                <option>standard</option>
-                <option>vegetarian</option>
-                <option>vegan</option>
-                <option>halal</option>
-                <option>kosher</option>
-                <option>gluten-free</option>
-              </select>
+          <div class="mb-6 bg-gray-50 p-4 rounded-lg">
+            <h3 class="text-lg font-bold mb-4 text-gray-800">Add Extras</h3>
+            <div class="space-y-3">
+              <label class="flex items-center">
+                <input 
+                  type="checkbox" 
+                  [(ngModel)]="bookingForm.extras.extraLegroom" 
+                  name="legroom"
+                  class="rounded">
+                <span class="ml-3 text-gray-700">Extra Legroom - $25</span>
+              </label>
+              
+              <label class="flex items-center">
+                <input 
+                  type="checkbox" 
+                  [(ngModel)]="bookingForm.extras.extraBaggage" 
+                  name="baggage"
+                  class="rounded">
+                <span class="ml-3 text-gray-700">Extra Baggage</span>
+                <input 
+                  type="number" 
+                  [(ngModel)]="bookingForm.extras.extraBaggageCount" 
+                  name="baggageCount" 
+                  min="0" 
+                  max="5" 
+                  *ngIf="bookingForm.extras.extraBaggage"
+                  class="ml-2 w-16 px-2 py-1 border border-gray-300 rounded"> pieces &#64; $15 each
+              </label>
+              
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Special Meal</label>
+                <select 
+                  [(ngModel)]="bookingForm.extras.specialMeal" 
+                  name="meal"
+                  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
+                  <option value="standard">Standard</option>
+                  <option value="vegetarian">Vegetarian</option>
+                  <option value="vegan">Vegan</option>
+                  <option value="halal">Halal</option>
+                  <option value="kosher">Kosher</option>
+                  <option value="gluten-free">Gluten-Free</option>
+                </select>
+              </div>
             </div>
           </div>
           
-          <div *ngIf="error" class="alert alert-error">{{ error }}</div>
-          <button [disabled]="loading">{{ loading ? 'Booking...' : 'Complete Booking' }}</button>
+          <div *ngIf="error" class="alert alert-error mb-6">{{ error }}</div>
+          
+          <button 
+            [disabled]="loading"
+            class="w-full bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition">
+            {{ loading ? 'Processing...' : 'Complete Booking' }}
+          </button>
         </form>
       </div>
     </div>
   `,
-  styles: [`
-    .seat-grid {
-      display: grid;
-      grid-template-columns: repeat(6, 1fr);
-      gap: 8px;
-      margin: 15px 0;
-    }
-    .seat {
-      padding: 10px;
-      text-align: center;
-      border: 2px solid #ddd;
-      cursor: pointer;
-      border-radius: 4px;
-      font-size: 12px;
-      font-weight: bold;
-    }
-    .seat-available {
-      background: #e8f5e9;
-      border-color: #4caf50;
-      color: #2e7d32;
-    }
-    .seat-available:hover {
-      background: #c8e6c9;
-    }
-    .seat-selected {
-      background: #4caf50;
-      color: white;
-      border-color: #2e7d32;
-    }
-    .seat-booked {
-      background: #ffebee;
-      border-color: #f44336;
-      color: #c62828;
-      cursor: not-allowed;
-      opacity: 0.7;
-    }
-    .extras-section {
-      margin: 15px 0;
-    }
-    .extra-item {
-      margin: 10px 0;
-    }
-  `]
+  styles: []
 })
 export class BookingComponent implements OnInit, OnDestroy {
   selectedTrip: any = null;
@@ -202,13 +208,11 @@ export class BookingComponent implements OnInit, OnDestroy {
       this.setupRealtimeSeats();
     }
 
-    // Pre-fill email from current user
     const user = this.authService.getCurrentUser();
     if (user) {
       this.bookingForm.email = user.email;
     }
 
-    // Monitor WebSocket connection
     this.seatWebSocketService.getConnectionStatus()
       .pipe(takeUntil(this.destroy$))
       .subscribe(connected => {

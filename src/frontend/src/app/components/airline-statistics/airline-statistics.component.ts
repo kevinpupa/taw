@@ -8,52 +8,54 @@ import { AuthService } from '../../services/auth.service';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div style="max-width: 1000px; margin: 0 auto;">
-      <h2>Flight Statistics</h2>
+    <div class="max-w-6xl mx-auto">
+      <h2 class="text-4xl font-bold mb-8 text-gray-800">Flight Statistics</h2>
       
       <div *ngIf="loading" class="alert alert-info">Loading statistics...</div>
       <div *ngIf="error" class="alert alert-error">{{ error }}</div>
       
-      <div *ngIf="!loading && stats" class="grid">
+      <div *ngIf="!loading && stats" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <div class="card">
-          <h3>Total Passengers</h3>
-          <p style="font-size: 24px; font-weight: bold;">{{ stats.totalPassengers || 0 }}</p>
+          <p class="text-gray-600 text-sm font-semibold uppercase mb-2">Total Passengers</p>
+          <p class="text-3xl font-bold text-sky-600">{{ stats.totalPassengers || 0 }}</p>
         </div>
         
         <div class="card">
-          <h3>Total Revenue</h3>
-          <p style="font-size: 24px; font-weight: bold;">\${{ stats.totalRevenue | number:'1.2-2' }}</p>
+          <p class="text-gray-600 text-sm font-semibold uppercase mb-2">Total Revenue</p>
+          <p class="text-3xl font-bold text-green-600">{{ stats.totalRevenue | currency }}</p>
         </div>
         
         <div class="card">
-          <h3>Average Occupancy</h3>
-          <p style="font-size: 24px; font-weight: bold;">{{ stats.avgOccupancy | number:'1.1-1' }}%</p>
+          <p class="text-gray-600 text-sm font-semibold uppercase mb-2">Avg Occupancy</p>
+          <p class="text-3xl font-bold text-blue-600">{{ stats.avgOccupancy | number:'1.1-1' }}%</p>
         </div>
         
         <div class="card">
-          <h3>Total Flights</h3>
-          <p style="font-size: 24px; font-weight: bold;">{{ stats.totalFlights || 0 }}</p>
+          <p class="text-gray-600 text-sm font-semibold uppercase mb-2">Total Flights</p>
+          <p class="text-3xl font-bold text-indigo-600">{{ stats.totalFlights || 0 }}</p>
         </div>
       </div>
       
       <div *ngIf="!loading && stats && stats.popularRoutes && stats.popularRoutes.length > 0" class="card">
-        <h3>Most Popular Routes</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Route</th>
-              <th>Passengers</th>
-              <th>Revenue</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let route of stats.popularRoutes">
-              <td>{{ route._id.from }} → {{ route._id.to }}</td>
-              <td>{{ route.passengers }}</td>
-              <td>\${{ route.revenue | number:'1.2-2' }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <h3 class="text-2xl font-bold mb-4 text-gray-800">Most Popular Routes</h3>
+        <div class="overflow-x-auto">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Route</th>
+                <th>Passengers</th>
+                <th>Revenue</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let route of stats.popularRoutes">
+                <td class="font-medium">{{ route._id.from }} → {{ route._id.to }}</td>
+                <td>{{ route.passengers }}</td>
+                <td class="text-green-600 font-semibold">{{ route.revenue | currency }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   `
@@ -69,7 +71,6 @@ export class AirlineStatisticsComponent implements OnInit {
   ) {}
 
   ngOnInit() {
-    // Ensure token is available before making API calls
     const token = this.authService.getToken();
     if (token) {
       this.loadStatistics();

@@ -8,8 +8,8 @@ import { AirlineService } from '../../services/airline.service';
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div style="max-width: 1000px; margin: 0 auto;">
-      <h2>Airline Management</h2>
+    <div class="max-w-6xl mx-auto">
+      <h2 class="text-4xl font-bold mb-8 text-gray-800">Airline Management</h2>
       
       <form (ngSubmit)="createAirline()" class="card">
         <h3>Create New Airline</h3>
