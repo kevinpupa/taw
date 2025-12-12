@@ -48,10 +48,10 @@ import { AuthService } from '../../services/auth.service';
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let route of stats.popularRoutes">
-                <td class="font-medium">{{ route._id.from }} → {{ route._id.to }}</td>
-                <td>{{ route.passengers }}</td>
-                <td class="text-green-600 font-semibold">{{ route.revenue | currency }}</td>
+              <tr *ngFor="let pr of stats.popularRoutes">
+                <td class="font-medium">{{ (pr.route?.from || 'Unknown') }} → {{ (pr.route?.to || 'Unknown') }}</td>
+                <td>{{ pr.passengerCount || 0 }}</td>
+                <td class="text-green-600 font-semibold">{{ (pr.revenue || 0) | currency }}</td>
               </tr>
             </tbody>
           </table>
@@ -71,13 +71,9 @@ export class AirlineStatisticsComponent implements OnInit {
   ) {}
 
   ngOnInit() {
-    const token = this.authService.getToken();
-    if (token) {
-      this.loadStatistics();
-    } else {
-      this.error = 'Authentication token not found. Please log in again.';
-      this.loading = false;
-    }
+    // Token is stored as httpOnly cookie and sent via withCredentials.
+    // Attempt to load statistics; handle 401 in error handler.
+    this.loadStatistics();
   }
 
   loadStatistics(): void {
@@ -87,7 +83,14 @@ export class AirlineStatisticsComponent implements OnInit {
         this.loading = false;
       },
       error: (err: any) => {
-        this.error = err.error?.error?.message || 'Failed to load statistics';
+        const msg = err?.error?.error?.message;
+        if (msg === 'Access denied. No token provided.' || msg === 'Invalid token.' || msg === 'Token expired.') {
+          this.error = 'Authentication required. Please log in again.';
+        } else if (msg === 'Airline admin access required.') {
+          this.error = 'Airline admin access required.';
+        } else {
+          this.error = msg || 'Failed to load statistics';
+        }
         this.loading = false;
       }
     });

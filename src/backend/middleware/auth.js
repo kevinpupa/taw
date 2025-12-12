@@ -82,9 +82,11 @@ const isAdmin = (req, res, next) => {
     next();
 };
 
-// Check if user is airline_admin
+// Check if user is airline admin
+// Accept both 'airline_admin' and legacy seeded 'airline' role
 const isAirlineAdmin = (req, res, next) => {
-    if (!req.user || req.user.role !== 'airline_admin') {
+    const role = req.user?.role;
+    if (!role || (role !== 'airline_admin' && role !== 'airline')) {
         return res.status(403).json({ error: { message: 'Airline admin access required.' } });
     }
     next();

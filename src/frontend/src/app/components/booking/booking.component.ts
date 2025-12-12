@@ -255,14 +255,7 @@ export class BookingComponent implements OnInit, OnDestroy {
       this.loadSeatMap(flightId);
       this.loadFlightDetails(flightId);
       this.setupRealtimeSeats();
-      },
-      error: (err: any) => {
-        // Show backend-provided error message if available
-        const msg = err?.error?.message || err?.error?.error?.message;
-        const firstDetail = Array.isArray(err?.error?.errors) ? err.error.errors[0]?.message : undefined;
-        this.error = firstDetail || msg || 'Booking failed. Please try a different seat or flight.';
-        this.loading = false;
-      }
+    }
 
     const storedClass = sessionStorage.getItem('selectedClass');
     if (storedClass) {

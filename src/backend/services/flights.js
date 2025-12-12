@@ -349,8 +349,8 @@ const getFlightStats = async (airlineId, filters = {}) => {
         averageTicketPrice: ticketStats[0]?.avgTicketPrice || 0,
         popularRoutes: popularRoutes.map(r => ({
             route: {
-                departure: r.routeData.departureAirport,
-                arrival: r.routeData.arrivalAirport
+                from: r.routeData.departureAirport?.code || 'Unknown',
+                to: r.routeData.arrivalAirport?.code || 'Unknown'
             },
             passengerCount: r.passengerCount,
             revenue: r.totalRevenue
